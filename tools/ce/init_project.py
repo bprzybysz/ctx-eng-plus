@@ -186,6 +186,7 @@ class ProjectInitializer:
             if ce_extracted.exists():
                 for item in ce_extracted.iterdir():
                     dest = self.ce_dir / item.name
+
                     if dest.exists():
                         if dest.is_dir():
                             shutil.rmtree(dest)
@@ -211,8 +212,48 @@ class ProjectInitializer:
                         dest.unlink()
                 shutil.move(str(item), str(dest))
 
-            # Detect and flatten nested .ce/ structures (universal fix for any project)
-            self._flatten_nested_structures(self.ce_dir)
+            # FIXME: Detect and flatten nested .ce/ structures (universal fix for any project)
+            # The current flattening logic doesn't fully prevent .ce/.ce/ nesting.
+            # Temporary workaround: Aggressively remove .ce/.ce/ after flattening attempt.
+            # Root cause: Repomix extraction creates nested structures that the flatten method
+            # doesn't completely eliminate. Needs investigation of extraction/merge timing.
+            try:
+                self._flatten_nested_structures(self.ce_dir)
+            except Exception as e:
+                logger.warning(f"Flattening error (continuing): {e}")
+
+            # FIXME: Workaround - aggressively remove any remaining nested .ce/
+            nested_ce = self.ce_dir / ".ce"
+            if nested_ce.exists() and nested_ce.is_dir():
+                logger.warning(f"FIXME: Nested .ce/ still exists after flattening, removing manually")
+                try:
+                    # Move any contents up before removing
+                    for item in nested_ce.iterdir():
+                        dest = self.ce_dir / item.name
+                        if dest.exists() and item.name != ".ce":
+                            # Merge directories if both exist
+                            if dest.is_dir() and item.is_dir():
+                                for subitem in item.iterdir():
+                                    subdest = dest / subitem.name
+                                    if subdest.exists():
+                                        if subdest.is_dir():
+                                            shutil.rmtree(subdest)
+                                        else:
+                                            subdest.unlink()
+                                    shutil.move(str(subitem), str(subdest))
+                            else:
+                                if dest.is_dir():
+                                    shutil.rmtree(dest)
+                                else:
+                                    dest.unlink()
+                                shutil.move(str(item), str(dest))
+                        elif item.name != ".ce":
+                            shutil.move(str(item), str(dest))
+                    # Now remove the empty nested .ce/
+                    shutil.rmtree(nested_ce)
+                    logger.info(f"FIXME workaround: Removed nested .ce/ manually")
+                except Exception as e:
+                    logger.error(f"FIXME: Failed to remove nested .ce/: {e}")
 
             # Copy ce-workflow-docs.xml (reference package)
             if self.workflow_xml.exists():
