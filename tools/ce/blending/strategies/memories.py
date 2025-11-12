@@ -431,6 +431,49 @@ class MemoriesBlendStrategy(BlendStrategy):
         """
         dst.write_text(src.read_text())
 
+    def _get_memory_type(self, content: str) -> str:
+        """
+        Extract memory type from YAML header (Fix 2 - Strict Type Detection).
+
+        Parses YAML header correctly to avoid false positives from "source:" or
+        "type: user" appearing in memory body.
+
+        Args:
+            content: Full memory file content
+
+        Returns:
+            Memory type ("user", "framework", "critical", "regular", or "unknown")
+        """
+        try:
+            if not content.startswith("---"):
+                return "unknown"
+
+            # Extract YAML frontmatter using proper splitting
+            parts = content.split("---", 2)
+            if len(parts) < 2:
+                return "unknown"
+
+            yaml_block = parts[1].strip()
+
+            # Parse YAML to extract type field specifically
+            header = yaml.safe_load(yaml_block)
+            if not isinstance(header, dict):
+                return "unknown"
+
+            # Get type from header, default to "regular" if not specified
+            mem_type = header.get("type", "regular")
+
+            # Validate type value
+            if mem_type not in ["user", "framework", "critical", "regular"]:
+                logger.warning(f"Unknown memory type: {mem_type}, defaulting to regular")
+                return "regular"
+
+            return mem_type
+
+        except Exception as e:
+            logger.warning(f"Failed to parse memory type: {e}")
+            return "unknown"
+
     def _list_memory_files(self, path: Path) -> List[str]:
         """
         List all .md files in memory directory.

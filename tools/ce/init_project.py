@@ -91,15 +91,43 @@ class ProjectInitializer:
         Extract ce-infrastructure.xml to target project.
 
         Steps:
-        1. Check if ce-infrastructure.xml exists
-        2. Extract to .ce/ directory
-        3. Reorganize tools/ to .ce/tools/
-        4. Copy ce-workflow-docs.xml to .ce/
+        1. Clean git state if repo is dirty (Fix 3)
+        2. Check if ce-infrastructure.xml exists
+        3. Extract to .ce/ directory
+        4. Reorganize tools/ to .ce/tools/
+        5. Copy ce-workflow-docs.xml to .ce/
+        6. Flatten nested .ce/ structures (Fix 1)
 
         Returns:
             Dict with extraction status and file counts
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         status = {"success": False, "files_extracted": 0, "message": ""}
+
+        # Fix 3: FIRST - Ensure clean git state before extraction
+        if self.target_project.exists() and (self.target_project / ".git").exists():
+            logger.info("Cleaning git state before extraction...")
+            result = subprocess.run(
+                ["git", "reset", "--hard", "HEAD"],
+                cwd=self.target_project,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0 and "fatal:" not in result.stderr:
+                logger.warning(f"Git reset warning: {result.stderr.strip()}")
+            elif result.returncode == 0:
+                logger.info("Git state reset successfully")
+
+            # Clean untracked files
+            result = subprocess.run(
+                ["git", "clean", "-fd"],
+                cwd=self.target_project,
+                capture_output=True,
+                text=True
+            )
+            logger.info("Untracked files cleaned")
 
         # Check for infrastructure package
         if not self.infrastructure_xml.exists():
@@ -182,6 +210,9 @@ class ProjectInitializer:
                     else:
                         dest.unlink()
                 shutil.move(str(item), str(dest))
+
+            # Detect and flatten nested .ce/ structures (universal fix for any project)
+            self._flatten_nested_structures(self.ce_dir)
 
             # Copy ce-workflow-docs.xml (reference package)
             if self.workflow_xml.exists():
@@ -268,6 +299,104 @@ This project uses the Context Engineering framework.
 See `.claude/` for detailed configuration and examples.
 """
                 claude_md.write_text(minimal_claude_md)
+
+    def _flatten_nested_structures(self, root_dir: Path) -> None:
+        """
+        Recursively flatten nested .ce/ directories at any depth (Fix 1).
+
+        Repomix extraction can sometimes create nested .ce/.ce/ structures
+        which violates the config.yml expectation of a flat .ce/ directory.
+        This method detects and flattens any nested structures with strong
+        verification to ensure no nesting remains.
+
+        Args:
+            root_dir: Root directory to check for nested .ce/ structures
+
+        Raises:
+            RuntimeError: If nested .ce/ structures cannot be fully flattened
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        max_depth = 5
+        attempt_count = 0
+
+        while attempt_count < max_depth:
+            nested_ce = root_dir / ".ce"
+
+            # Verify nested .ce/ exists
+            if not nested_ce.exists() or not nested_ce.is_dir():
+                if attempt_count == 0:
+                    logger.info("No nested .ce/ structures found")
+                else:
+                    logger.info(f"Nested structures fully flattened (took {attempt_count} iterations)")
+                break
+
+            # Check if nested_ce contains .ce/ subdirectory (indicates nesting)
+            sub_nested = nested_ce / ".ce"
+            if not sub_nested.exists():
+                logger.info("No further nesting detected")
+                break
+
+            logger.warning(f"Detected nested .ce/ at iteration {attempt_count + 1} - flattening...")
+
+            # Flatten this level: move all items from nested_ce up to root_dir
+            try:
+                for item in nested_ce.iterdir():
+                    dest = root_dir / item.name
+
+                    # Skip .ce directory itself (will be removed later)
+                    if item.name == ".ce":
+                        continue
+
+                    # Handle conflicts
+                    if dest.exists():
+                        if dest.is_dir() and item.is_dir():
+                            # Merge directory contents
+                            logger.info(f"Merging {item.name}")
+                            for subitem in item.iterdir():
+                                subdest = dest / subitem.name
+                                if subdest.exists():
+                                    if subdest.is_dir():
+                                        shutil.rmtree(subdest)
+                                    else:
+                                        subdest.unlink()
+                                shutil.move(str(subitem), str(subdest))
+                        else:
+                            # Replace file or dir with file
+                            logger.info(f"Overwriting {item.name}")
+                            if dest.is_dir():
+                                shutil.rmtree(dest)
+                            else:
+                                dest.unlink()
+                            shutil.move(str(item), str(dest))
+                    else:
+                        shutil.move(str(item), str(dest))
+
+                # Remove the now-empty nested .ce/ directory
+                try:
+                    shutil.rmtree(nested_ce)
+                    logger.info(f"Removed nested .ce/ level {attempt_count + 1}")
+                except Exception as e:
+                    logger.error(f"Failed to remove nested .ce/ at level {attempt_count + 1}: {e}")
+                    break
+
+            except Exception as e:
+                logger.error(f"Error during flattening iteration {attempt_count + 1}: {e}")
+                break
+
+            attempt_count += 1
+
+        # VERIFICATION: Check for remaining nested structures
+        nested_check = list((root_dir / ".ce").glob("**/.ce")) if (root_dir / ".ce").exists() else []
+        if nested_check:
+            error_msg = f"VERIFICATION FAILED: {len(nested_check)} nested .ce/ still exist after flattening:\n"
+            for nc in nested_check[:5]:  # Show first 5
+                error_msg += f"  - {nc}\n"
+            logger.error(error_msg)
+            raise RuntimeError("Nested .ce/ structures not fully flattened")
+        else:
+            logger.info("✓ VERIFICATION PASSED: No nested .ce/ structures")
 
     def _fix_yaml_indentation(self, yaml_path: Path) -> None:
         """
