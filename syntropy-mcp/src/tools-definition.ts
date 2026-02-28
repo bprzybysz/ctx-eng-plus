@@ -17,7 +17,7 @@ export const SYNTROPY_TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        name_path: {
+        name_path_pattern: {
           type: "string",
           description: "Name path to search for (e.g., 'MyClass.my_method')"
         },
@@ -26,7 +26,7 @@ export const SYNTROPY_TOOLS = [
           description: "Include function/method body in results"
         }
       },
-      required: ["name_path"]
+      required: ["name_path_pattern"]
     }
   },
   {
@@ -49,7 +49,7 @@ export const SYNTROPY_TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        pattern: {
+        substring_pattern: {
           type: "string",
           description: "Regex pattern to search for"
         },
@@ -58,7 +58,7 @@ export const SYNTROPY_TOOLS = [
           description: "File glob pattern to limit search"
         }
       },
-      required: ["pattern"]
+      required: ["substring_pattern"]
     }
   },
   {
@@ -67,12 +67,12 @@ export const SYNTROPY_TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        name_path: {
+        name_path_pattern: {
           type: "string",
           description: "Name path of symbol to find references for"
         }
       },
-      required: ["name_path"]
+      required: ["name_path_pattern"]
     }
   },
   {
@@ -81,16 +81,16 @@ export const SYNTROPY_TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        memory_type: {
+        memory_file_name: {
           type: "string",
-          description: "Type of memory (e.g., 'architecture', 'pattern', 'note')"
+          description: "Memory file name (e.g., 'architecture', 'pattern', 'note')"
         },
         content: {
           type: "string",
           description: "Content to store"
         }
       },
-      required: ["memory_type", "content"]
+      required: ["memory_file_name", "content"]
     }
   },
   {
@@ -131,12 +131,16 @@ export const SYNTROPY_TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        directory_path: {
+        relative_path: {
           type: "string",
           description: "Relative path to directory (relative to project root)"
+        },
+        recursive: {
+          type: "boolean",
+          description: "Whether to list recursively"
         }
       },
-      required: ["directory_path"]
+      required: ["relative_path", "recursive"]
     }
   },
   {
@@ -159,12 +163,12 @@ export const SYNTROPY_TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        name: {
+        memory_file_name: {
           type: "string",
           description: "Memory name to read"
         }
       },
-      required: ["name"]
+      required: ["memory_file_name"]
     }
   },
   {
@@ -390,6 +394,162 @@ export const SYNTROPY_TOOLS = [
         }
       },
       required: ["project_name"]
+    }
+  },
+  {
+    name: "serena_initial_instructions",
+    description: "Gets the initial instructions for the current project. Use this to understand how to work with the project.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: "serena_prepare_for_new_conversation",
+    description: "Provides instructions for preparing for a new conversation (to continue with necessary context)",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: "serena_summarize_changes",
+    description: "Provides instructions for summarizing the changes made to the codebase",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: "serena_switch_modes",
+    description: "Activates modes by providing a list of their names",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        mode_names: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of mode names to activate"
+        }
+      },
+      required: ["mode_names"]
+    }
+  },
+  {
+    name: "serena_edit_memory",
+    description: "Edit an existing memory in Serena's project-specific memory store",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        memory_file_name: {
+          type: "string",
+          description: "Memory file name to edit"
+        },
+        content: {
+          type: "string",
+          description: "New content for the memory"
+        }
+      },
+      required: ["memory_file_name", "content"]
+    }
+  },
+  {
+    name: "serena_rename_symbol",
+    description: "Renames a symbol throughout the codebase",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name_path: {
+          type: "string",
+          description: "Name path of symbol to rename"
+        },
+        new_name: {
+          type: "string",
+          description: "New name for the symbol"
+        }
+      },
+      required: ["name_path", "new_name"]
+    }
+  },
+  {
+    name: "serena_find_file",
+    description: "Find a file in the project by name or pattern",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pattern: {
+          type: "string",
+          description: "File name or pattern to search for"
+        }
+      },
+      required: ["pattern"]
+    }
+  },
+  {
+    name: "serena_replace_content",
+    description: "Replace content in a file",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        relative_path: {
+          type: "string",
+          description: "Relative path to file"
+        },
+        old_content: {
+          type: "string",
+          description: "Content to replace"
+        },
+        new_content: {
+          type: "string",
+          description: "Replacement content"
+        }
+      },
+      required: ["relative_path", "old_content", "new_content"]
+    }
+  },
+  {
+    name: "serena_think_about_collected_information",
+    description: "Thinking tool for pondering the completeness of collected information",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        thought: {
+          type: "string",
+          description: "Current thought about collected information"
+        }
+      },
+      required: ["thought"]
+    }
+  },
+  {
+    name: "serena_think_about_task_adherence",
+    description: "Thinking tool for determining whether the agent is still on track with the current task",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        thought: {
+          type: "string",
+          description: "Current thought about task adherence"
+        }
+      },
+      required: ["thought"]
+    }
+  },
+  {
+    name: "serena_think_about_whether_you_are_done",
+    description: "Thinking tool for determining whether the task is truly completed",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        thought: {
+          type: "string",
+          description: "Current thought about task completion"
+        }
+      },
+      required: ["thought"]
     }
   },
 
